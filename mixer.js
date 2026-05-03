@@ -1,19 +1,23 @@
 // mixer.js — логика страницы миксера.
-// Этап 2: два sandbox-iframe с YouTube-плеерами, общаемся через postMessage.
+// Этап 2: два iframe-а с github.io, общаемся через postMessage.
 
 console.log('YMix mixer page loaded');
 
-// Кэшируем ссылки на iframe-ы по ключу дека.
+// Должно совпадать с origin страниц-плееров (github.io).
+const PLAYER_ORIGIN = 'https://tmksdm.github.io';
+
 const frames = {
   a: document.getElementById('frame-a'),
   b: document.getElementById('frame-b'),
 };
 
-// Чтобы не слать команды до того, как плеер готов.
 const ready = { a: false, b: false };
 
-// ====== Приём сообщений из sandbox-страниц ======
+// ====== Приём сообщений из плееров ======
 window.addEventListener('message', (event) => {
+  // Безопасность: принимаем только сообщения от наших страниц на github.io.
+  if (event.origin !== PLAYER_ORIGIN) return;
+
   const msg = event.data;
   if (!msg || typeof msg !== 'object' || !msg.deck) return;
 
@@ -37,13 +41,13 @@ window.addEventListener('message', (event) => {
   }
 });
 
-// ====== Отправка команд в sandbox ======
+// ====== Отправка команд в плееры ======
 function sendToDeck(deckKey, message) {
   const frame = frames[deckKey];
   if (!frame || !frame.contentWindow) return;
-  // '*' — потому что sandbox-страница имеет origin null,
-  // и точечно адресовать её по origin не получится.
-  frame.contentWindow.postMessage(message, '*');
+  // targetOrigin: точно адресуем github.io — браузер не доставит сообщение,
+  // если в iframe внезапно загрузилась чужая страница.
+  frame.contentWindow.postMessage(message, PLAYER_ORIGIN);
 }
 
 // ====== Кнопки Play/Pause ======

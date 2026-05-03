@@ -1,6 +1,7 @@
 // player-frame.js — страница с одним YouTube-плеером.
-// Управляется через postMessage от родителя (mixer.html).
-// Запускается внутри <iframe sandbox="allow-scripts allow-same-origin ...">.
+// Размещена на GitHub Pages (https://tmksdm.github.io/ymix/), потому что
+// в Manifest V3 расширения YouTube IFrame API работать не может.
+// Управляется через postMessage от родителя (mixer.html в расширении).
 
 (function () {
   const params = new URLSearchParams(location.search);
@@ -9,11 +10,9 @@
 
   let player = null;
 
-  // Грузим IFrame API ЛОКАЛЬНО — внешние скрипты в MV3 запрещены.
-  // Сам этот скрипт-загрузчик дальше подтянет нужный плеер с youtube.com/embed/...
-  // и тот тоже будет работать благодаря frame-src в манифесте.
+  // Загружаем официальный YT IFrame API. На обычной https-странице это работает штатно.
   const tag = document.createElement('script');
-  tag.src = 'vendor/youtube-iframe-api.js';
+  tag.src = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(tag);
 
   window.onYouTubeIframeAPIReady = function () {
@@ -40,11 +39,19 @@
     });
   };
 
+  // ====== Связь с родителем (mixer.html в расширении) ======
   function sendToParent(msg) {
+    // '*' — потому что родитель и эта страница на разных origin-ах
+    // (chrome-extension://... и https://tmksdm.github.io). Для безопасности
+    // на стороне родителя мы будем фильтровать сообщения по event.origin.
     parent.postMessage(msg, '*');
   }
 
   window.addEventListener('message', (event) => {
+    // Принимаем только команды от родителя на chrome-extension://...
+    // Другие фреймы и страницы пускай не вмешиваются.
+    if (!event.origin || !event.origin.startsWith('chrome-extension://')) return;
+
     const msg = event.data;
     if (!msg || typeof msg !== 'object') return;
     if (!player) return;
