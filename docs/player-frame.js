@@ -17,7 +17,7 @@
 
   window.onYouTubeIframeAPIReady = function () {
     player = new YT.Player('player', {
-      videoId: initialVideoId,
+      videoId: initialVideoId || undefined, // если пусто — плеер стартует без видео
       playerVars: {
         controls: 1,
         rel: 0,
@@ -43,13 +43,12 @@
   function sendToParent(msg) {
     // '*' — потому что родитель и эта страница на разных origin-ах
     // (chrome-extension://... и https://tmksdm.github.io). Для безопасности
-    // на стороне родителя мы будем фильтровать сообщения по event.origin.
+    // на стороне родителя мы фильтруем сообщения по event.origin.
     parent.postMessage(msg, '*');
   }
 
   window.addEventListener('message', (event) => {
     // Принимаем только команды от родителя на chrome-extension://...
-    // Другие фреймы и страницы пускай не вмешиваются.
     if (!event.origin || !event.origin.startsWith('chrome-extension://')) return;
 
     const msg = event.data;
@@ -63,10 +62,18 @@
       case 'pause':
         player.pauseVideo();
         break;
+      case 'stop':
+        player.stopVideo();
+        break;
       case 'setVolume':
         player.setVolume(Number(msg.value) || 0);
         break;
       case 'loadVideo':
+        // Загрузить и НЕ играть автоматически (cueVideoById ставит видео на паузу).
+        if (msg.videoId) player.cueVideoById(msg.videoId);
+        break;
+      case 'loadAndPlay':
+        // Загрузить и сразу запустить.
         if (msg.videoId) player.loadVideoById(msg.videoId);
         break;
     }
