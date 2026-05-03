@@ -4,3 +4,8 @@ document.getElementById('openMixer').addEventListener('click', () => {
   });
   window.close();
 });
+
+document.getElementById('openOptions').addEventListener('click', () => {
+  chrome.runtime.openOptionsPage();
+  window.close();
+});

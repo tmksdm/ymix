@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>YMix — Настройки</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 32px;
+      background: #121212;
+      color: #f0f0f0;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+    .wrap {
+      max-width: 640px;
+    }
+    h1 { margin: 0 0 8px 0; font-size: 22px; }
+    .subtitle { color: #888; margin: 0 0 24px 0; font-size: 14px; }
+    label {
+      display: block;
+      margin-top: 16px;
+      font-size: 14px;
+      color: #ccc;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      margin-top: 6px;
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #f0f0f0;
+      font-family: ui-monospace, monospace;
+      font-size: 14px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 10px 18px;
+      font-size: 14px;
+      background: #ff5722;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover { background: #e64a19; }
+    button.secondary {
+      background: #333;
+    }
+    button.secondary:hover { background: #444; }
+    .status {
+      font-size: 13px;
+      color: #4caf50;
+      min-height: 18px;
+    }
+    .status.error { color: #f44336; }
+    .hint {
+      margin-top: 24px;
+      padding: 12px 14px;
+      background: #1e1e1e;
+      border-left: 3px solid #ff5722;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #bbb;
+      line-height: 1.5;
+    }
+    .hint a { color: #ff8a65; }
+    .toggle-show {
+      font-size: 12px;
+      color: #888;
+      cursor: pointer;
+      user-select: none;
+      margin-top: 4px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>⚙ Настройки YMix</h1>
+    <p class="subtitle">Эти данные хранятся локально в твоём браузере.</p>
+
+    <label for="apiKey">YouTube Data API key</label>
+    <input type="password" id="apiKey" placeholder="AIzaSy..." autocomplete="off" spellcheck="false">
+    <span class="toggle-show" id="toggleShow">показать</span>
+
+    <div class="row">
+      <button id="saveBtn">Сохранить</button>
+      <button id="clearBtn" class="secondary">Очистить</button>
+      <span class="status" id="status"></span>
+    </div>
+
+    <div class="hint">
+      Где взять ключ: <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank">Google Cloud Console → YouTube Data API v3 → Enable → Credentials → Create API key</a>.
+      Ключ нужен только для чтения публичных плейлистов и не даёт доступа к твоему аккаунту.
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
