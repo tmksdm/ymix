@@ -22,7 +22,7 @@
       align-items: center;
       flex-wrap: wrap;
       max-width: 1400px;
-      margin-bottom: 24px;
+      margin-bottom: 16px;
       padding: 12px 14px;
       background: #1e1e1e;
       border: 1px solid #333;
@@ -52,6 +52,31 @@
     .playlist-bar .bar-status.error { color: #f44336; }
     .playlist-bar .bar-status.ok { color: #4caf50; }
 
+    /* ===== Транспорт (общие кнопки управления) ===== */
+    .transport {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      max-width: 1400px;
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 8px;
+    }
+    .transport .now-playing {
+      margin-left: 12px;
+      font-size: 13px;
+      color: #aaa;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+    }
+    .transport .now-playing strong { color: #f0f0f0; }
+
     /* ===== Деки ===== */
     .decks {
       display: grid;
@@ -64,6 +89,11 @@
       border: 1px solid #333;
       border-radius: 8px;
       padding: 16px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .deck.active {
+      border-color: #ff5722;
+      box-shadow: 0 0 0 2px rgba(255, 87, 34, .25);
     }
     .deck h2 { margin: 0 0 12px 0; font-size: 18px; }
     .player-wrap {
@@ -98,6 +128,10 @@
     }
     button:hover { background: #e64a19; }
     button:disabled { background: #555; cursor: not-allowed; }
+    button.secondary {
+      background: #444;
+    }
+    button.secondary:hover { background: #555; }
     .status { margin-left: auto; font-size: 12px; color: #888; }
 
     /* ===== Список треков ===== */
@@ -128,7 +162,17 @@
       border: 1px solid #2a2a2a;
       border-radius: 4px;
       font-size: 13px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
     }
+    .track:hover { background: #232323; }
+    .track.current {
+      background: #2a1a12;
+      border-color: #ff5722;
+    }
+    .track.current .num { color: #ff5722; font-weight: bold; }
+    .track.unavailable { cursor: not-allowed; opacity: .55; }
+    .track.unavailable:hover { background: #1a1a1a; }
     .track .num { color: #666; text-align: right; }
     .track img {
       width: 80px;
@@ -172,37 +216,46 @@
     <span class="bar-status" id="barStatus"></span>
   </div>
 
+  <!-- Транспорт: общие кнопки управления плейлистом -->
+  <div class="transport">
+    <button id="btnPrev"   class="secondary" disabled title="Предыдущий трек">⏮</button>
+    <button id="btnPlay"                     disabled title="Играть">▶ Play</button>
+    <button id="btnPause"  class="secondary" disabled title="Пауза">⏸ Pause</button>
+    <button id="btnNext"   class="secondary" disabled title="Следующий трек">⏭</button>
+    <span class="now-playing" id="nowPlaying">— ничего не играет —</span>
+  </div>
+
   <!-- Деки -->
   <div class="decks">
-    <section class="deck">
+    <section class="deck" id="deck-a">
       <h2>Дек A</h2>
       <div class="player-wrap">
         <iframe
           id="frame-a"
-          src="https://tmksdm.github.io/ymix/player-frame.html?deck=a&video=M7lc1UVf-VE"
+          src="https://tmksdm.github.io/ymix/player-frame.html?deck=a"
           allow="autoplay; encrypted-media; picture-in-picture"
           allowfullscreen
         ></iframe>
       </div>
       <div class="controls">
-        <button class="btn-play" data-deck="a" disabled>▶ Play</button>
+        <button class="btn-play"  data-deck="a" disabled>▶ Play</button>
         <button class="btn-pause" data-deck="a" disabled>⏸ Pause</button>
         <span class="status" id="status-a">загрузка…</span>
       </div>
     </section>
 
-    <section class="deck">
+    <section class="deck" id="deck-b">
       <h2>Дек B</h2>
       <div class="player-wrap">
         <iframe
           id="frame-b"
-          src="https://tmksdm.github.io/ymix/player-frame.html?deck=b&video=dQw4w9WgXcQ"
+          src="https://tmksdm.github.io/ymix/player-frame.html?deck=b"
           allow="autoplay; encrypted-media; picture-in-picture"
           allowfullscreen
         ></iframe>
       </div>
       <div class="controls">
-        <button class="btn-play" data-deck="b" disabled>▶ Play</button>
+        <button class="btn-play"  data-deck="b" disabled>▶ Play</button>
         <button class="btn-pause" data-deck="b" disabled>⏸ Pause</button>
         <span class="status" id="status-b">загрузка…</span>
       </div>

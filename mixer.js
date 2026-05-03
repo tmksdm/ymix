@@ -1,6 +1,7 @@
 // mixer.js — логика страницы миксера.
 // Этап 2: два iframe-а с github.io, общаемся через postMessage.
-// Этап 3.2: загрузка плейлиста через YouTube Data API + рендер списка.
+// Этап 3: загрузка плейлиста через YouTube Data API + рендер списка.
+// Этап 4: очередь, последовательное воспроизведение, общие кнопки транспорта.
 
 console.log('YMix mixer page loaded');
 
@@ -11,14 +12,42 @@ const PLAYER_ORIGIN = 'https://tmksdm.github.io';
 const STORAGE_API_KEY = 'ytApiKey';
 const STORAGE_LAST_PLAYLIST = 'lastPlaylist'; // { id, tracks, savedAt }
 
+// ====== DOM ======
 const frames = {
   a: document.getElementById('frame-a'),
   b: document.getElementById('frame-b'),
 };
+const deckEls = {
+  a: document.getElementById('deck-a'),
+  b: document.getElementById('deck-b'),
+};
 
+const playlistInput = document.getElementById('playlistInput');
+const loadPlaylistBtn = document.getElementById('loadPlaylistBtn');
+const barStatus = document.getElementById('barStatus');
+const tracksList = document.getElementById('tracksList');
+
+const btnPrev  = document.getElementById('btnPrev');
+const btnPlay  = document.getElementById('btnPlay');
+const btnPause = document.getElementById('btnPause');
+const btnNext  = document.getElementById('btnNext');
+const nowPlayingEl = document.getElementById('nowPlaying');
+
+// ====== Состояние ======
 const ready = { a: false, b: false };
 
-// ====== Деки: приём сообщений из плееров ======
+// Очередь и текущая позиция.
+let currentTracks = []; // массив треков (см. playlist.js: loadPlaylist)
+let queueIndex = -1;    // индекс текущего трека в currentTracks (-1 = ничего)
+let activeDeck = 'a';   // на каком деке сейчас играем (на Этапе 4 всегда 'a')
+let isPlaying = false;  // играет ли сейчас активный дек
+
+// Флаг, чтобы при первом state=0 (после ручной паузы/cue) не уехать на следующий трек.
+// state=0 (ENDED) приходит только когда видео реально доиграло до конца.
+// Но YT может прислать 0 и при stopVideo — поэтому подстрахуемся флагом.
+let expectEndedAdvance = false;
+
+// ====== Сообщения от плееров ======
 window.addEventListener('message', (event) => {
   if (event.origin !== PLAYER_ORIGIN) return;
 
@@ -31,16 +60,22 @@ window.addEventListener('message', (event) => {
       ready[msg.deck] = true;
       enableDeckButtons(msg.deck);
       setStatus(msg.deck, 'готов');
+      updateTransportButtons();
       break;
 
     case 'state':
       console.log(`[YMix] Player ${msg.deck} state: ${stateToName(msg.state)}`);
       setStatus(msg.deck, stateToName(msg.state));
+      handlePlayerState(msg.deck, msg.state);
       break;
 
     case 'error':
       console.error(`[YMix] Player ${msg.deck} error:`, msg.code);
       setStatus(msg.deck, `ошибка ${msg.code}`);
+      // Если ошибка на активном деке во время воспроизведения — пробуем дальше.
+      if (msg.deck === activeDeck && isPlaying) {
+        playNext();
+      }
       break;
   }
 });
@@ -51,8 +86,30 @@ function sendToDeck(deckKey, message) {
   frame.contentWindow.postMessage(message, PLAYER_ORIGIN);
 }
 
+// ====== Реакция на состояние плеера ======
+function handlePlayerState(deckKey, state) {
+  if (deckKey !== activeDeck) return;
+
+  // 1 = играет, 2 = пауза, 0 = закончено.
+  if (state === 1) {
+    isPlaying = true;
+    expectEndedAdvance = true; // раз пошло играть — значит, следующий ENDED законный
+    updateTransportButtons();
+  } else if (state === 2) {
+    isPlaying = false;
+    updateTransportButtons();
+  } else if (state === 0) {
+    // Видео доиграло. Переходим на следующий трек.
+    if (expectEndedAdvance) {
+      expectEndedAdvance = false;
+      playNext();
+    }
+  }
+}
+
+// ====== Кнопки на самих деках (оставляем для отладки) ======
 document.addEventListener('click', (e) => {
-  const btn = e.target.closest('button[data-deck]');
+  const btn = e.target.closest('.deck button[data-deck]');
   if (!btn) return;
 
   const deckKey = btn.dataset.deck;
@@ -67,7 +124,7 @@ document.addEventListener('click', (e) => {
 
 function enableDeckButtons(deckKey) {
   document
-    .querySelectorAll(`button[data-deck="${deckKey}"]`)
+    .querySelectorAll(`.deck button[data-deck="${deckKey}"]`)
     .forEach((btn) => (btn.disabled = false));
 }
 
@@ -88,14 +145,128 @@ function stateToName(code) {
   }
 }
 
-// ====== Плейлист ======
+// ====== Транспорт: общие кнопки ======
+btnPlay.addEventListener('click', () => {
+  if (queueIndex < 0) {
+    // Ничего не выбрано — стартуем с первого доступного трека.
+    const firstAvailable = currentTracks.findIndex(t => t.available);
+    if (firstAvailable >= 0) playTrackAt(firstAvailable);
+  } else {
+    // Просто разблокируем паузу на активном деке.
+    sendToDeck(activeDeck, { type: 'play' });
+  }
+});
 
-const playlistInput = document.getElementById('playlistInput');
-const loadPlaylistBtn = document.getElementById('loadPlaylistBtn');
-const barStatus = document.getElementById('barStatus');
-const tracksList = document.getElementById('tracksList');
+btnPause.addEventListener('click', () => {
+  sendToDeck(activeDeck, { type: 'pause' });
+});
 
-let currentTracks = []; // массив треков, который потом будет использовать Этап 4
+btnNext.addEventListener('click', () => playNext());
+btnPrev.addEventListener('click', () => playPrev());
+
+function updateTransportButtons() {
+  const hasTracks = currentTracks.some(t => t.available);
+  const deckReady = ready[activeDeck];
+
+  btnPlay.disabled  = !hasTracks || !deckReady;
+  btnPause.disabled = !isPlaying || !deckReady;
+  btnNext.disabled  = !hasTracks || !deckReady;
+  btnPrev.disabled  = !hasTracks || !deckReady || queueIndex <= 0;
+}
+
+// ====== Воспроизведение по очереди ======
+function playTrackAt(index) {
+  if (index < 0 || index >= currentTracks.length) return;
+  const track = currentTracks[index];
+  if (!track || !track.available) {
+    // Недоступный — попробуем найти следующий доступный.
+    const next = findNextAvailable(index, +1);
+    if (next >= 0) playTrackAt(next);
+    return;
+  }
+
+  queueIndex = index;
+  // На Этапе 4 активный дек всегда A. На Этапе 5 будем чередовать.
+  activeDeck = 'a';
+
+  // Загружаем и сразу запускаем.
+  expectEndedAdvance = false; // станет true, когда придёт state=1
+  sendToDeck(activeDeck, { type: 'loadAndPlay', videoId: track.videoId });
+
+  // UI.
+  setActiveDeckHighlight(activeDeck);
+  highlightCurrentTrack(index);
+  updateNowPlaying(track);
+  updateTransportButtons();
+}
+
+function playNext() {
+  const next = findNextAvailable(queueIndex, +1);
+  if (next >= 0) {
+    playTrackAt(next);
+  } else {
+    // Дошли до конца плейлиста (repeat-режимы будут на Этапе 6).
+    stopActiveDeck();
+    queueIndex = -1;
+    isPlaying = false;
+    highlightCurrentTrack(-1);
+    updateNowPlaying(null);
+    updateTransportButtons();
+  }
+}
+
+function playPrev() {
+  const prev = findNextAvailable(queueIndex, -1);
+  if (prev >= 0) playTrackAt(prev);
+}
+
+// Ищет следующий/предыдущий доступный трек, начиная с from + step.
+function findNextAvailable(from, step) {
+  let i = from + step;
+  while (i >= 0 && i < currentTracks.length) {
+    if (currentTracks[i] && currentTracks[i].available) return i;
+    i += step;
+  }
+  return -1;
+}
+
+function stopActiveDeck() {
+  expectEndedAdvance = false; // не считать остановку за «трек кончился»
+  sendToDeck(activeDeck, { type: 'stop' });
+}
+
+// ====== UI: подсветка ======
+function setActiveDeckHighlight(deckKey) {
+  Object.entries(deckEls).forEach(([k, el]) => {
+    if (!el) return;
+    el.classList.toggle('active', k === deckKey);
+  });
+}
+
+function highlightCurrentTrack(index) {
+  const items = tracksList.querySelectorAll('li.track');
+  items.forEach((li, i) => li.classList.toggle('current', i === index));
+  // Прокрутить активный трек в зону видимости.
+  if (index >= 0 && items[index]) {
+    items[index].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+function updateNowPlaying(track) {
+  if (!track) {
+    nowPlayingEl.textContent = '— ничего не играет —';
+    return;
+  }
+  nowPlayingEl.innerHTML = '';
+  const label = document.createElement('strong');
+  label.textContent = track.title;
+  nowPlayingEl.append(`▶ `, label);
+  if (track.channel) {
+    nowPlayingEl.append(` — ${track.channel}`);
+  }
+}
+
+// ====== Плейлист: загрузка и рендер ======
 
 // При открытии страницы — подгрузить последний плейлист, если есть.
 chrome.storage.local.get([STORAGE_LAST_PLAYLIST], (data) => {
@@ -105,13 +276,11 @@ chrome.storage.local.get([STORAGE_LAST_PLAYLIST], (data) => {
     playlistInput.value = last.id || '';
     renderTracks(currentTracks);
     setBarStatus(`загружен сохранённый плейлист: ${currentTracks.length} треков`, 'ok');
+    updateTransportButtons();
   }
 });
 
-// Клик «Загрузить».
 loadPlaylistBtn.addEventListener('click', loadPlaylistFromInput);
-
-// Enter в поле ввода = клик по кнопке.
 playlistInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') loadPlaylistFromInput();
 });
@@ -129,7 +298,6 @@ async function loadPlaylistFromInput() {
     return;
   }
 
-  // Достаём API-ключ.
   const { [STORAGE_API_KEY]: apiKey } = await chromeStorageGet([STORAGE_API_KEY]);
   if (!apiKey) {
     setBarStatus('нет API-ключа — открой Настройки и сохрани его', 'error');
@@ -142,9 +310,15 @@ async function loadPlaylistFromInput() {
   try {
     const tracks = await YMixPlaylist.loadPlaylist(playlistId, apiKey);
     currentTracks = tracks;
+
+    // Сбросим текущее воспроизведение — плейлист сменился.
+    stopActiveDeck();
+    queueIndex = -1;
+    isPlaying = false;
+    updateNowPlaying(null);
+
     renderTracks(tracks);
 
-    // Сохраняем «последний плейлист» для следующего открытия.
     chrome.storage.local.set({
       [STORAGE_LAST_PLAYLIST]: {
         id: playlistId,
@@ -155,6 +329,7 @@ async function loadPlaylistFromInput() {
 
     const ok = tracks.filter(t => t.available).length;
     setBarStatus(`загружено треков: ${tracks.length} (доступно: ${ok})`, 'ok');
+    updateTransportButtons();
   } catch (err) {
     console.error('[YMix] Ошибка загрузки плейлиста:', err);
     setBarStatus(`ошибка: ${err.message}`, 'error');
@@ -177,6 +352,7 @@ function renderTracks(tracks) {
   tracks.forEach((t, idx) => {
     const li = document.createElement('li');
     li.className = 'track' + (t.available ? '' : ' unavailable');
+    li.dataset.index = String(idx);
 
     const num = document.createElement('span');
     num.className = 'num';
@@ -201,6 +377,16 @@ function renderTracks(tracks) {
   });
 }
 
+// Делегированный клик по треку: играть с этого места.
+tracksList.addEventListener('click', (e) => {
+  const li = e.target.closest('li.track');
+  if (!li) return;
+  if (li.classList.contains('unavailable')) return;
+  const idx = Number(li.dataset.index);
+  if (!Number.isFinite(idx)) return;
+  playTrackAt(idx);
+});
+
 // ====== Утилиты ======
 function setBarStatus(text, kind) {
   barStatus.textContent = text;
@@ -208,7 +394,6 @@ function setBarStatus(text, kind) {
   barStatus.classList.toggle('ok', kind === 'ok');
 }
 
-// chrome.storage.local.get с промисом (чтобы можно было await).
 function chromeStorageGet(keys) {
   return new Promise((resolve) => {
     chrome.storage.local.get(keys, resolve);

@@ -16,8 +16,9 @@
   document.head.appendChild(tag);
 
   window.onYouTubeIframeAPIReady = function () {
-    player = new YT.Player('player', {
-      videoId: initialVideoId || undefined, // если пусто — плеер стартует без видео
+    // Конфиг плеера. videoId добавляем только если он реально есть в URL,
+    // иначе YT API падает с "Invalid video id".
+    const config = {
       playerVars: {
         controls: 1,
         rel: 0,
@@ -36,7 +37,12 @@
           sendToParent({ type: 'error', deck: deckKey, code: e.data });
         },
       },
-    });
+    };
+    if (initialVideoId) {
+      config.videoId = initialVideoId;
+    }
+
+    player = new YT.Player('player', config);
   };
 
   // ====== Связь с родителем (mixer.html в расширении) ======
